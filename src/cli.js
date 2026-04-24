@@ -1,78 +1,83 @@
-#!/usr/bin/env node
-
-'use strict';
+/**
+ * cli.js - Parses CLI arguments and orchestrates palette extraction
+ */
 
 const path = require('path');
-const { loadImage } = require('./imageLoader');
-const { extractPalette } = require('./palette');
-const { getColorLabel, sortByLuminance } = require('./colorUtils');
+const { printPalette } = require('./output');
 
-const args = process.argv.slice(2);
-
+/**
+ * Prints usage instructions to stdout
+ */
 function printUsage() {
-  console.log('Usage: ember-palette <image-path> [options]');
-  console.log('');
-  console.log('Options:');
-  console.log('  --colors <n>    Number of colors to extract (default: 6)');
-  console.log('  --json          Output results as JSON');
-  console.log('  --help          Show this help message');
+  console.log(`
+Usage: ember-palette <image> [options]
+
+Options:
+  -k, --colors <n>   Number of colors to extract (default: 6)
+  --json             Output palette as JSON
+  --no-sort          Skip luminance sorting
+  -h, --help         Show this help message
+
+Examples:
+  ember-palette photo.jpg
+  ember-palette banner.png --colors 8 --json
+`);
 }
 
-function parseArgs(args) {
-  const opts = { colors: 6, json: false, imagePath: null };
+/**
+ * Parses process.argv-style argument array into an options object
+ * @param {string[]} argv
+ * @returns {{ imagePath: string|null, colors: number, json: boolean, sort: boolean, help: boolean }}
+ */
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const opts = {
+    imagePath: null,
+    colors: 6,
+    json: false,
+    sort: true,
+    help: false
+  };
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--help') {
-      printUsage();
-      process.exit(0);
-    } else if (args[i] === '--json') {
+    const arg = args[i];
+    if (arg === '-h' || arg === '--help') {
+      opts.help = true;
+    } else if (arg === '--json') {
       opts.json = true;
-    } else if (args[i] === '--colors' && args[i + 1]) {
+    } else if (arg === '--no-sort') {
+      opts.sort = false;
+    } else if ((arg === '-k' || arg === '--colors') && args[i + 1]) {
       const n = parseInt(args[++i], 10);
       if (!isNaN(n) && n > 0) opts.colors = n;
-    } else if (!args[i].startsWith('--')) {
-      opts.imagePath = args[i];
+    } else if (!arg.startsWith('-') && !opts.imagePath) {
+      opts.imagePath = path.resolve(arg);
     }
   }
 
   return opts;
 }
 
-async function run() {
-  const opts = parseArgs(args);
+/**
+ * Entry point — runs the CLI
+ * @param {string[]} argv
+ */
+async function runCli(argv) {
+  const opts = parseArgs(argv);
 
-  if (!opts.imagePath) {
-    console.error('Error: No image path provided.');
+  if (opts.help || !opts.imagePath) {
     printUsage();
-    process.exit(1);
+    return;
   }
 
-  const resolvedPath = path.resolve(opts.imagePath);
-
   try {
-    const pixels = await loadImage(resolvedPath);
-    const palette = extractPalette(pixels, opts.colors);
-    const sorted = sortByLuminance(palette);
-
-    if (opts.json) {
-      const output = sorted.map(color => ({
-        hex: color.hex,
-        rgb: color.rgb,
-        label: getColorLabel(color.rgb)
-      }));
-      console.log(JSON.stringify(output, null, 2));
-    } else {
-      console.log(`\nExtracted ${sorted.length} colors from: ${opts.imagePath}\n`);
-      sorted.forEach((color, i) => {
-        const label = getColorLabel(color.rgb);
-        console.log(`  ${i + 1}. ${color.hex}  —  ${label}`);
-      });
-      console.log('');
-    }
+    const { extractPalette } = require('./palette');
+    const palette = await extractPalette(opts.imagePath, { k: opts.colors, sort: opts.sort });
+    printPalette(palette, { json: opts.json, imagePath: opts.imagePath });
   } catch (err) {
     console.error(`Error: ${err.message}`);
     process.exit(1);
   }
 }
 
-run();
+module.exports = { printUsage, parseArgs, runCli };
