@@ -1,0 +1,7 @@
+node_modules/
+
+.parcel-cache/
+yarn-debug.log*
+yarn-error.log*
+.env.local
+*.log
