@@ -7,6 +7,13 @@ const Jimp = require('jimp');
  * @returns {Promise<Array<{r, g, b}>>} Array of sampled pixel colors
  */
 async function loadImagePixels(imagePath, sampleSize = 1000) {
+  if (!imagePath || typeof imagePath !== 'string') {
+    throw new Error('imagePath must be a non-empty string.');
+  }
+  if (typeof sampleSize !== 'number' || sampleSize < 1) {
+    throw new Error('sampleSize must be a positive number.');
+  }
+
   let image;
   try {
     image = await Jimp.read(imagePath);
