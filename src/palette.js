@@ -1,44 +1,67 @@
-const { loadImagePixels, toHex } = require('./imageLoader');
+/**
+ * palette.js
+ * Orchestrates image loading, k-means clustering, filtering, and palette output.
+ */
+
 const { kmeans } = require('./kmeans');
+const { loadImagePixels } = require('./imageLoader');
+const { applyFilters } = require('./colorFilter');
+const { sortByLuminance } = require('./colorUtils');
+
+const DEFAULT_K = 8;
+const DEFAULT_MAX_ITER = 20;
 
 /**
- * Extracts a color palette from an image file.
- *
- * @param {string} imagePath - Path to the source image
+ * Extract a color palette from an image file.
+ * @param {string} imagePath
  * @param {object} options
- * @param {number} [options.colors=6]      - Number of palette colors to extract
- * @param {number} [options.sampleSize=1000] - Pixels to sample from the image
- * @param {number} [options.maxIterations=50] - K-means iteration limit
- * @returns {Promise<Array<{hex: string, rgb: {r,g,b}, count: number}>>}
+ * @param {number} options.k - number of colors to extract
+ * @param {number} options.maxIterations
+ * @param {boolean} options.filterColors - apply vibrance/lightness filtering
+ * @param {object} options.filterOptions - options passed to applyFilters
+ * @returns {Promise<Array<{r,g,b,hex}>>}
  */
 async function extractPalette(imagePath, options = {}) {
-  const { colors = 6, sampleSize = 1000, maxIterations = 50 } = options;
+  const {
+    k = DEFAULT_K,
+    maxIterations = DEFAULT_MAX_ITER,
+    filterColors = true,
+    filterOptions = {},
+  } = options;
 
-  if (colors < 1 || colors > 32) {
-    throw new Error('colors must be between 1 and 32');
+  const pixels = await loadImagePixels(imagePath);
+
+  if (!pixels || pixels.length === 0) {
+    throw new Error(`No pixels loaded from image: ${imagePath}`);
   }
 
-  const pixels = await loadImagePixels(imagePath, sampleSize);
+  const centroids = kmeans(pixels, k, maxIterations);
 
-  if (pixels.length < colors) {
-    throw new Error(
-      `Not enough unique pixels (${pixels.length}) to form ${colors} clusters.`
-    );
-  }
+  const colors = filterColors
+    ? applyFilters(centroids, filterOptions)
+    : centroids;
 
-  const centroids = kmeans(pixels, colors, maxIterations);
-
-  // Sort palette by perceived luminance (darkest → lightest)
-  const sorted = centroids
-    .map((rgb) => ({
-      hex: toHex(rgb),
-      rgb,
-      luminance: 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b,
-    }))
-    .sort((a, b) => a.luminance - b.luminance)
-    .map(({ hex, rgb }) => ({ hex, rgb }));
+  const sorted = sortByLuminance(colors);
 
   return sorted;
 }
 
-module.exports = { extractPalette };
+/**
+ * Build a simple palette summary object.
+ * @param {Array<{r,g,b,hex}>} colors
+ * @returns {{ count: number, colors: Array }}
+ */
+function buildPaletteSummary(colors) {
+  return {
+    count: colors.length,
+    colors: colors.map((c, i) => ({
+      index: i,
+      r: c.r,
+      g: c.g,
+      b: c.b,
+      hex: c.hex || `#${[c.r, c.g, c.b].map(v => v.toString(16).padStart(2, '0')).join('')}`,
+    })),
+  };
+}
+
+module.exports = { extractPalette, buildPaletteSummary };
