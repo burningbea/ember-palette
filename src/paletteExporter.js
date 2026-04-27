@@ -31,7 +31,7 @@ export function paletteToCSS(palette, theme = null) {
       .replace(':root {', '')
       .replace(/}\s*$/, '')
       .trim();
-    if (themeVars) lines.push('', '  /* theme */');  
+    if (themeVars) lines.push('', '  /* theme */');
     themeVars.split('\n').forEach(line => line.trim() && lines.push(line));
   }
   lines.push('}');
@@ -53,9 +53,35 @@ export function paletteToSCSS(palette) {
 }
 
 /**
+ * Export a palette as an SVG swatch strip.
+ * Each color is rendered as a labeled rectangle.
+ * @param {Array} palette
+ * @param {object} [options]
+ * @param {number} [options.swatchWidth=80]
+ * @param {number} [options.swatchHeight=60]
+ * @returns {string} SVG markup
+ */
+export function paletteToSVG(palette, { swatchWidth = 80, swatchHeight = 60 } = {}) {
+  const totalWidth = swatchWidth * palette.length;
+  const rects = palette.map(({ hex, label }, i) => {
+    const x = i * swatchWidth;
+    const displayLabel = label || hex;
+    return [
+      `  <rect x="${x}" y="0" width="${swatchWidth}" height="${swatchHeight}" fill="${hex}" />`,
+      `  <text x="${x + swatchWidth / 2}" y="${swatchHeight + 14}" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#333">${displayLabel}</text>`,
+    ].join('\n');
+  });
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="${swatchHeight + 20}">`,
+    ...rects,
+    '</svg>',
+  ].join('\n');
+}
+
+/**
  * Write palette export to disk in the requested format.
  * @param {Array} palette
- * @param {string} format - 'json' | 'css' | 'scss'
+ * @param {string} format - 'json' | 'css' | 'scss' | 'svg'
  * @param {string} outputPath
  * @param {object|null} theme
  */
@@ -64,6 +90,7 @@ export function exportPalette(palette, format, outputPath, theme = null) {
   if (format === 'json') content = paletteToJSON(palette, theme);
   else if (format === 'css') content = paletteToCSS(palette, theme);
   else if (format === 'scss') content = paletteToSCSS(palette);
+  else if (format === 'svg') content = paletteToSVG(palette);
   else throw new Error(`Unsupported palette export format: ${format}`);
 
   const dir = path.dirname(outputPath);
